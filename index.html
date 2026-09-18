@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>海事測站與軌跡查詢儀表板 | Marine Observation Dashboard</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{
+          --bg:#fdfbf5;--card:#ffffff;--card-hover:#fffef8;
+          --border:#e6e1d6;--text:#2c3e50;--text-dim:#7f8c8d;
+          --accent:#2563eb;--accent2:#0891b2;--accent3:#7c3aed;
+          --green:#059669;--red:#dc2626;--orange:#d97706;
+          --gradient:linear-gradient(135deg,#2563eb,#0891b2);
+        }
+        html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+        
+        .app{display:flex;flex-direction:column;height:100vh}
+        
+        .header{
+          display:flex;align-items:center;justify-content:space-between;
+          padding:12px 24px;
+          background:linear-gradient(180deg,rgba(255,255,255,0.95),rgba(253,251,245,0.95));
+          border-bottom:1px solid var(--border);
+          backdrop-filter:blur(12px);z-index:1000;
+          box-shadow:0 1px 3px rgba(0,0,0,0.05);
+        }
+        .header h1{font-size:18px;font-weight:700;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        
+        /* 左右分割版型：地圖在左 (1fr)，控制面板在右 (480px) */
+        .main{flex:1;display:grid;grid-template-columns:1fr 480px;gap:0;overflow:hidden}
+        
+        .map-panel{position:relative;height:100%}
+        #map{width:100%;height:100%}
+        
+        .leaflet-popup-content-wrapper{background:var(--card)!important;color:var(--text)!important;border:1px solid var(--border)!important;border-radius:12px!important;box-shadow:0 10px 25px rgba(0,0,0,0.1)!important}
+        .leaflet-popup-tip{background:var(--card)!important;border:1px solid var(--border)!important}
+        .leaflet-popup-content{margin:12px 16px!important;font-family:'Inter',sans-serif!important;font-size:13px!important;line-height:1.6!important}
+        .leaflet-popup-content b{color:var(--accent);font-size:14px}
+        .popup-row{display:flex;justify-content:space-between;gap:12px}
+        .popup-label{color:var(--text-dim)}
+        .popup-val{font-weight:600}
+        
+        .sidebar{
+          display:flex;flex-direction:column;
+          background:var(--card);
+          border-left:1px solid var(--border);
+          overflow-y:auto;
+          padding:16px;
+          gap:16px;
+          box-shadow:-2px 0 10px rgba(0,0,0,0.02);
+        }
+        .sidebar::-webkit-scrollbar{width:6px}
+        .sidebar::-webkit-scrollbar-thumb{background:#d4cebe;border-radius:3px}
+
+        .card-box{
+          background:#fcfbf7;
+          border:1px solid var(--border);
+          border-radius:12px;
+          padding:16px;
+          box-shadow:0 1px 3px rgba(0,0,0,0.02);
+        }
+        .card-title{
+          font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
+          color:var(--text-dim);margin-bottom:12px;
+          display:flex;align-items:center;gap:8px;
+        }
+        .card-title::before{content:'';width:3px;height:14px;background:var(--gradient);border-radius:2px}
+
+        label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:6px;font-weight:500}
+        input,select{
+          width:100%;padding:8px 12px;background:#ffffff;border:1px solid var(--border);
+          border-radius:8px;color:var(--text);font-family:'Inter',sans-serif;font-size:13px;
+          margin-bottom:12px;outline:none;transition:all 0.2s;
+        }
+        input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,0.15)}
+        
+        .btn{
+          width:100%;padding:10px;border-radius:8px;border:none;font-weight:600;
+          font-size:13px;cursor:pointer;transition:all 0.2s;font-family:'Inter',sans-serif;
+          box-shadow:0 2px 4px rgba(0,0,0,0.05);
+        }
+        .btn-primary{background:var(--gradient);color:#fff}
+        .btn-primary:hover{opacity:0.9;transform:translateY(-1px)}
+        .btn-success{background:linear-gradient(135deg,#059669,#047857);color:#fff}
+        .btn-success:hover{opacity:0.9;transform:translateY(-1px)}
+
+        .table-wrap{
+          max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:#ffffff;
+        }
+        table{width:100%;border-collapse:collapse;font-size:12px;text-align:left}
+        th,td{padding:8px 10px;border-bottom:1px solid var(--border)}
+        th{background:#f4f1ea;color:var(--text-dim);position:sticky;top:0;z-index:10;font-weight:600}
+        tr:hover{background:#f9f8f4}
+
+        /* 風標圖例 */
+        .legend{
+          position:absolute;bottom:24px;left:24px;z-index:999;
+          background:rgba(255,255,255,0.92);backdrop-filter:blur(12px);
+          border:1px solid var(--border);border-radius:12px;padding:14px 18px;
+          color:var(--text);font-size:12px;box-shadow:0 4px 15px rgba(0,0,0,0.08);
+        }
+        .legend-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:8px}
+        .legend-item{display:flex;align-items:center;gap:8px;margin:4px 0}
+
+        .wind-barb-icon{pointer-events:none}
+        .leaflet-control-zoom a{background:#ffffff!important;color:var(--text)!important;border:1px solid var(--border)!important}
+        .leaflet-control-zoom{border:none!important;box-shadow:0 4px 12px rgba(0,0,0,0.08)!important;border-radius:8px!important;overflow:hidden}
+    </style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <h1>海事測站與軌跡查詢儀表板 | Marine Observation Dashboard</h1>
+  </header>
+
+  <div class="main">
+    <!-- 地圖在左側 (1fr) -->
+    <div class="map-panel">
+      <div id="map"></div>
+      <div class="legend">
+        <div class="legend-title">風標圖例</div>
+        <div class="legend-item">
+          <!-- 配合加粗樣式的圖例 -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="36" height="16" viewBox="0 0 44 16">
+            <line x1="10" y1="8" x2="36" y2="8" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="10" cy="8" r="3" fill="#2563eb"/>
+          </svg>
+          <span>風向（桿朝風吹來方向）</span>
+        </div>
+        <div class="legend-item">
+          <svg xmlns="http://www.w3.org/2000/svg" width="36" height="16" viewBox="0 0 44 16">
+            <line x1="10" y1="8" x2="36" y2="8" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="10" cy="8" r="3" fill="#2563eb"/>
+            <line x1="34" y1="8" x2="29" y2="1" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <span>全羽 = 10 m/s</span>
+        </div>
+        <div class="legend-item">
+          <svg xmlns="http://www.w3.org/2000/svg" width="36" height="16" viewBox="0 0 44 16">
+            <line x1="10" y1="8" x2="36" y2="8" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="10" cy="8" r="3" fill="#2563eb"/>
+            <line x1="34" y1="8" x2="31" y2="4.5" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <span>半羽 = 5 m/s</span>
+        </div>
+        <div class="legend-item" style="color:var(--red);font-weight:600;margin-top:4px;">
+          <span>紅色標示 = 歷史前一筆 (Fallback)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 控制面板與表格在右側 (480px) -->
+    <div class="sidebar">
+      <!-- 底圖樣式選擇 -->
+      <div class="card-box">
+        <div class="card-title">底圖樣式選擇</div>
+        <select id="basemapSelect">
+          <option value="esriStreet" selected>Esri 街道圖 (淺色乾淨 - 推薦)</option>
+          <option value="esriTopo">Esri 地形圖 (含地理特徵)</option>
+          <option value="esriSatellite">Esri 衛星空照圖 (真實影像)</option>
+          <option value="osm">OpenStreetMap (標準版)</option>
+          <option value="openTopo">OpenTopoMap (等高線地形圖)</option>
+        </select>
+      </div>
+
+      <!-- 功能一：全台測站時間狀態查詢 -->
+      <div class="card-box">
+        <div class="card-title">1. 全台測站時間狀態查詢</div>
+        <label for="queryTime">選擇時間 (帶入 API 參數)：</label>
+        <input type="datetime-local" id="queryTime" value="2026-05-31T01:00">
+        <button id="btnQueryOverview" class="btn btn-primary">載入地圖測站狀態</button>
+      </div>
+
+      <!-- 功能二：單一測站軌跡與時間序列查詢 -->
+      <div class="card-box">
+        <div class="card-title">2. 單一測站軌跡與時間序列</div>
+        <label for="stationSelect">選擇測站 / 船隻：</label>
+        <select id="stationSelect">
+          <option value="">載入測站清單中...</option>
+        </select>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div>
+            <label for="startTime">開始時間：</label>
+            <input type="datetime-local" id="startTime" value="2026-05-31T00:00">
+          </div>
+          <div>
+            <label for="endTime">結束時間：</label>
+            <input type="datetime-local" id="endTime" value="2026-05-31T02:00">
+          </div>
+        </div>
+        <button id="btnQueryStation" class="btn btn-success">查詢軌跡與詳細表格</button>
+      </div>
+
+      <!-- 觀測資料表格 -->
+      <div class="card-box" style="flex:1;display:flex;flex-direction:column;">
+        <div class="card-title">觀測資料記錄表格</div>
+        <div class="table-wrap">
+          <table id="observationTable">
+            <thead>
+              <tr>
+                <th>時間</th>
+                <th>緯度</th>
+                <th>經度</th>
+                <th>風速</th>
+                <th>風向</th>
+                <th>氣壓</th>
+                <th>氣溫</th>
+                <th>濕度</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="8" style="text-align:center;color:var(--text-dim);padding:20px;">請選擇測站並查詢</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // 定義 API 基礎網址
+    const API_BASE_URL = 'https://crabbing-quicken-pull.ngrok-free.dev';
+
+    // 設定不需 API Key 且穩定的免費底圖來源
+    const basemaps = {
+        esriStreet: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19,
+            attribution: 'Tiles &copy; Esri'
+        }),
+        esriTopo: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19,
+            attribution: 'Tiles &copy; Esri'
+        }),
+        esriSatellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19,
+            attribution: 'Tiles &copy; Esri'
+        }),
+        osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
+        }),
+        openTopo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            maxZoom: 17,
+            attribution: '&copy; OpenTopoMap'
+        })
+    };
+
+    // 初始化地圖 (置於左側)
+    const map = L.map('map', { zoomControl: true }).setView([23.5, 121.0], 7);
+
+    let currentBasemap = basemaps.esriStreet;
+    currentBasemap.addTo(map);
+
+    // 綁定底圖切換事件
+    document.getElementById('basemapSelect').addEventListener('change', function(e) {
+        map.removeLayer(currentBasemap);
+        currentBasemap = basemaps[e.target.value];
+        currentBasemap.addTo(map);
+    });
+
+    const observationLayerGroup = L.layerGroup().addTo(map);
+
+    const formatDateTimeForApi = (datetimeLocalStr) => {
+        if (!datetimeLocalStr) return '';
+        if (datetimeLocalStr.length === 16) {
+            return datetimeLocalStr + ':00';
+        }
+        return datetimeLocalStr;
+    };
+
+    // ★ 更新：強化風標線條與取消歷史值大小縮放 ★
+    const createWindIcon = (windDir, windSpeed, isFallback = false) => {
+        const rotation = windDir || 0;
+        const color = isFallback ? '#dc2626' : '#2563eb'; 
+        
+        // 尺寸固定為 36，不再根據 isFallback 放成兩倍
+        const size = 36; 
+        const anchor = size / 2;
+
+        let speed = windSpeed || 0;
+        let barbsSvg = '';
+        let pos = 34; // 起始點稍微往右移，給羽毛更多空間
+
+        const pennants = Math.floor(speed / 50);
+        speed %= 50;
+        const fullBarbs = Math.floor(speed / 10);
+        speed %= 10;
+        const halfBarbs = Math.floor(speed / 5);
+
+        // 加粗與拉長羽毛的繪製線條
+        for (let i = 0; i < pennants; i++) {
+            barbsSvg += `<polygon points="${pos},8 ${pos-5},1 ${pos-7},8" fill="${color}"/>`;
+            pos -= 7;
+        }
+        for (let i = 0; i < fullBarbs; i++) {
+            barbsSvg += `<line x1="${pos}" y1="8" x2="${pos-5}" y2="1" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>`;
+            pos -= 5;
+        }
+        for (let i = 0; i < halfBarbs; i++) {
+            barbsSvg += `<line x1="${pos}" y1="8" x2="${pos-3}" y2="4.5" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>`;
+            pos -= 4;
+        }
+
+        const html = `
+            <div style="transform: rotate(${rotation}deg); width: ${size}px; height: ${size}px; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.95); border-radius: 50%; border: 2px solid ${color}; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+                <svg width="${size * 0.8}" height="${size * 0.8}" viewBox="0 0 44 16" style="overflow:visible;">
+                    <!-- 風向桿 (加粗為 2.5) -->
+                    <line x1="10" y1="8" x2="36" y2="8" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>
+                    <!-- 中心點 -->
+                    <circle cx="10" cy="8" r="3" fill="${color}"/>
+                    <!-- 風速羽毛 -->
+                    ${barbsSvg}
+                </svg>
+            </div>
+        `;
+
+        return L.divIcon({
+            html: html,
+            className: 'wind-barb-icon',
+            iconSize: [size, size],
+            iconAnchor: [anchor, anchor]
+        });
+    };
+
+    // 載入測站選單
+    const loadStationsDropdown = () => {
+        fetch(`${API_BASE_URL}/stations`, {
+            headers: {
+                'ngrok-skip-browser-warning': 'true'
+            }
+        })
+            .then(res => res.json())
+            .then(data => {
+                const select = document.getElementById('stationSelect');
+                select.innerHTML = '<option value="">請選擇測站 / 船隻...</option>';
+                if (Array.isArray(data)) {
+                    data.forEach(station => {
+                        const opt = document.createElement('option');
+                        opt.value = station.MMSI;
+                        opt.textContent = `${station.ShipName} (MMSI: ${station.MMSI})`;
+                        select.appendChild(opt);
+                    });
+                }
+            })
+            .catch(err => console.error('載入測站清單失敗:', err));
+    };
+
+    // 1. 全台測站時間狀態查詢
+    const loadOverviewObservations = () => {
+        const rawTime = document.getElementById('queryTime').value;
+        const formattedTime = formatDateTimeForApi(rawTime);
+        const url = `${API_BASE_URL}/observations/fallback?time=${encodeURIComponent(formattedTime)}`;
+
+        console.log(`[API 請求] 全台測站時間狀態 (Fallback 演算法): ${url}`);
+
+        fetch(url, {
+            headers: {
+                'ngrok-skip-browser-warning': 'true'
+            }
+        })
+            .then(res => res.json())
+            .then(data => {
+                observationLayerGroup.clearLayers();
+                const thead = document.querySelector('#observationTable thead');
+                const tbody = document.querySelector('#observationTable tbody');
+                
+                thead.innerHTML = `
+                    <tr>
+                        <th>測站名稱</th>
+                        <th>時間</th>
+                        <th>緯度</th>
+                        <th>經度</th>
+                        <th>風速</th>
+                        <th>風向</th>
+                        <th>氣壓</th>
+                        <th>氣溫</th>
+                        <th>濕度</th>
+                    </tr>
+                `;
+                tbody.innerHTML = '';
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:20px;">該時間點無觀測資料</td></tr>';
+                    alert('該時間點無觀測資料');
+                    return;
+                }
+
+                const latLngs = [];
+                data.forEach(obs => {
+                    const isFallback = (obs.isFallback === true || obs.isFallback === "true");
+                    const tr = document.createElement('tr');
+                    if (isFallback) tr.style.backgroundColor = '#fef2f2';
+
+                    const statusTag = isFallback 
+                        ? `<span style="color:#dc2626;font-size:10px;font-weight:700;" title="歷史資料 (Fallback)">[歷史]</span>` 
+                        : `<span style="color:#059669;font-size:10px;font-weight:700;" title="即時資料">[即時]</span>`;
+                    
+                    tr.innerHTML = `
+                        <td><b>${obs.ShipName || '測站'}</b> (${obs.MMSI}) ${statusTag}</td>
+                        <td>${obs.ObservationTime}</td>
+                        <td>${obs.Lat}</td>
+                        <td>${obs.Lon}</td>
+                        <td>${obs.WindSpeed}</td>
+                        <td>${obs.WindDir}</td>
+                        <td>${obs.AirPressure}</td>
+                        <td>${obs.AirTemp}</td>
+                        <td>${obs.RH}</td>
+                    `;
+                    tbody.appendChild(tr);
+
+                    if (obs.Lat !== undefined && obs.Lon !== undefined) {
+                        latLngs.push([obs.Lat, obs.Lon]);
+                        const icon = createWindIcon(obs.WindDir, obs.WindSpeed, isFallback);
+                        const marker = L.marker([obs.Lat, obs.Lon], { icon: icon });
+
+                        const statusBadge = isFallback 
+                            ? `<div style="color: #dc2626; font-size: 11px; font-weight: 700; margin-bottom: 4px;">⚠️ 該時間點無資料 (顯示歷史前一筆)</div>` 
+                            : `<div style="color: #059669; font-size: 11px; font-weight: 700; margin-bottom: 4px;">🟢 當下即時資料</div>`;
+
+                        const popupContent = `
+                            ${statusBadge}
+                            <b>${obs.ShipName || '測站'} (MMSI: ${obs.MMSI})</b><br>
+                            <div class="popup-row"><span class="popup-label">資料時間:</span> <span class="popup-val">${obs.ObservationTime}</span></div>
+                            <div class="popup-row"><span class="popup-label">風速:</span> <span class="popup-val">${obs.WindSpeed} m/s</span></div>
+                            <div class="popup-row"><span class="popup-label">風向:</span> <span class="popup-val">${obs.WindDir}°</span></div>
+                            <div class="popup-row"><span class="popup-label">氣壓:</span> <span class="popup-val">${obs.AirPressure} hPa</span></div>
+                        `;
+                        marker.bindPopup(popupContent);
+                        observationLayerGroup.addLayer(marker);
+                    }
+                });
+
+                if (latLngs.length > 0) {
+                    map.fitBounds(latLngs, { padding: [50, 50] });
+                }
+            })
+            .catch(err => {
+                console.error('查詢觀測資料失敗:', err);
+                alert('查詢觀測資料失敗');
+            });
+    };
+
+    // 2. 單一測站軌跡與時間序列查詢
+    const loadStationTimeSeries = () => {
+        const mmsi = document.getElementById('stationSelect').value;
+        if (!mmsi) return alert('請先選擇測站');
+        
+        const start = formatDateTimeForApi(document.getElementById('startTime').value);
+        const end = formatDateTimeForApi(document.getElementById('endTime').value);
+        const url = `${API_BASE_URL}/stations/${mmsi}/observations?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+
+        console.log(`[API 請求] 測站軌跡: ${url}`);
+
+        fetch(url, {
+            headers: {
+                'ngrok-skip-browser-warning': 'true'
+            }
+        })
+            .then(res => res.json())
+            .then(data => {
+                observationLayerGroup.clearLayers();
+                const thead = document.querySelector('#observationTable thead');
+                const tbody = document.querySelector('#observationTable tbody');
+
+                thead.innerHTML = `
+                    <tr>
+                        <th>時間</th>
+                        <th>緯度</th>
+                        <th>經度</th>
+                        <th>風速</th>
+                        <th>風向</th>
+                        <th>氣壓</th>
+                        <th>氣溫</th>
+                        <th>濕度</th>
+                    </tr>
+                `;
+                tbody.innerHTML = '';
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:20px;">查無此區間觀測資料</td></tr>';
+                    return;
+                }
+
+                const pathCoords = [];
+                data.forEach(obs => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${obs.ObservationTime}</td>
+                        <td>${obs.Lat}</td>
+                        <td>${obs.Lon}</td>
+                        <td>${obs.WindSpeed}</td>
+                        <td>${obs.WindDir}</td>
+                        <td>${obs.AirPressure}</td>
+                        <td>${obs.AirTemp}</td>
+                        <td>${obs.RH}</td>
+                    `;
+                    tbody.appendChild(tr);
+
+                    if (obs.Lat !== undefined && obs.Lon !== undefined) {
+                        pathCoords.push([obs.Lat, obs.Lon]);
+                        const icon = createWindIcon(obs.WindDir, obs.WindSpeed, false);
+                        const marker = L.marker([obs.Lat, obs.Lon], { icon: icon });
+                        marker.bindPopup(`
+                            <b>MMSI: ${obs.MMSI}</b><br>
+                            <div class="popup-row"><span class="popup-label">時間:</span> <span class="popup-val">${obs.ObservationTime}</span></div>
+                            <div class="popup-row"><span class="popup-label">風速:</span> <span class="popup-val">${obs.WindSpeed} m/s</span></div>
+                            <div class="popup-row"><span class="popup-label">風向:</span> <span class="popup-val">${obs.WindDir}°</span></div>
+                        `);
+                        observationLayerGroup.addLayer(marker);
+                    }
+                });
+
+                if (pathCoords.length > 0) {
+                    const polyline = L.polyline(pathCoords, { color: '#2563eb', weight: 3, opacity: 0.8, dashArray: '4, 8' });
+                    observationLayerGroup.addLayer(polyline);
+                    map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+                }
+            })
+            .catch(err => {
+                console.error('查詢失敗:', err);
+            });
+    };
+
+    document.getElementById('btnQueryOverview').addEventListener('click', loadOverviewObservations);
+    document.getElementById('btnQueryStation').addEventListener('click', loadStationTimeSeries);
+
+    loadStationsDropdown();
+</script>
+</body>
+</html>
