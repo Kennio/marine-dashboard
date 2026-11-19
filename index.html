@@ -3,18 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>海事測站與軌跡查詢儀表板 | Marine Observation Dashboard</title>
+    <title>船舶自動識別系統</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
         :root{
-          --bg:#fdfbf5;--card:#ffffff;--card-hover:#fffef8;
-          --border:#e6e1d6;--text:#2c3e50;--text-dim:#7f8c8d;
-          --accent:#2563eb;--accent2:#0891b2;--accent3:#7c3aed;
-          --green:#059669;--red:#dc2626;--orange:#d97706;
+          --bg:#fdfbf5;--card:#ffffff;--border:#e6e1d6;
+          --text:#2c3e50;--text-dim:#7f8c8d;--accent:#2563eb;
+          --green:#059669;--red:#dc2626;
           --gradient:linear-gradient(135deg,#2563eb,#0891b2);
         }
         html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
@@ -28,46 +26,66 @@
           border-bottom:1px solid var(--border);
           backdrop-filter:blur(12px);z-index:1000;
           box-shadow:0 1px 3px rgba(0,0,0,0.05);
+          flex-wrap: wrap; gap: 12px;
         }
         .header h1{font-size:18px;font-weight:700;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
         
-        /* 預設桌面版型：左右分割 */
+        .system-monitor {
+            display: flex; gap: 16px; font-size: 11px; color: var(--text-dim);
+            background: rgba(255, 255, 255, 0.8); padding: 6px 12px;
+            border-radius: 20px; border: 1px solid var(--border);
+        }
+        .sys-stat { display: flex; align-items: center; gap: 6px; }
+        .sys-indicator { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
+        .sys-indicator.active { background: var(--green); box-shadow: 0 0 5px var(--green); }
+
         .main{flex:1;display:grid;grid-template-columns:1fr 480px;gap:0;overflow:hidden}
         
         .map-panel{position:relative;height:100%}
         #map{width:100%;height:100%;z-index:1}
         
-        .leaflet-popup-content-wrapper{background:var(--card)!important;color:var(--text)!important;border:1px solid var(--border)!important;border-radius:12px!important;box-shadow:0 10px 25px rgba(0,0,0,0.1)!important}
-        .leaflet-popup-tip{background:var(--card)!important;border:1px solid var(--border)!important}
-        .leaflet-popup-content{margin:12px 16px!important;font-family:'Inter',sans-serif!important;font-size:13px!important;line-height:1.6!important}
-        .leaflet-popup-content b{color:var(--accent);font-size:14px}
+        /* 需求 3：修改 Popup 資訊框背景為 0.1 (10%) 不透明度 */
+        .leaflet-popup-content-wrapper {
+            background: rgba(255, 255, 255, 0.1) !important;
+            backdrop-filter: blur(4px) !important; /* 保留微弱毛玻璃效果幫助閱讀 */
+            color: var(--text) !important;
+            border: 1px solid rgba(230, 225, 214, 0.4) !important;
+            border-radius: 12px !important;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+        }
+        .leaflet-popup-tip {
+            background: rgba(255, 255, 255, 0.1) !important;
+            border: 1px solid rgba(230, 225, 214, 0.4) !important;
+            backdrop-filter: blur(4px) !important;
+        }
+        .leaflet-popup-content {
+            margin: 12px 16px !important;
+            font-family: 'Inter', sans-serif !important;
+            font-size: 13px !important;
+            line-height: 1.6 !important;
+            text-shadow: 0 0 4px rgba(255,255,255,0.9); /* 在高度透明的背景下保護文字可讀性 */
+        }
+        .leaflet-popup-content b { color: var(--accent); font-size: 14px; }
+        
         .popup-row{display:flex;justify-content:space-between;gap:12px}
-        .popup-label{color:var(--text-dim)}
-        .popup-val{font-weight:600}
+        .popup-label{color:var(--text-dim);font-weight:600;}
+        .popup-val{font-weight:700;}
         
         .sidebar{
-          display:flex;flex-direction:column;
-          background:var(--card);
-          border-left:1px solid var(--border);
-          overflow-y:auto;
-          padding:16px;
-          gap:16px;
-          box-shadow:-2px 0 10px rgba(0,0,0,0.02);
+          display:flex;flex-direction:column; background:var(--card);
+          border-left:1px solid var(--border); overflow-y:auto;
+          padding:16px; gap:16px; box-shadow:-2px 0 10px rgba(0,0,0,0.02);
         }
         .sidebar::-webkit-scrollbar{width:6px}
         .sidebar::-webkit-scrollbar-thumb{background:#d4cebe;border-radius:3px}
 
         .card-box{
-          background:#fcfbf7;
-          border:1px solid var(--border);
-          border-radius:12px;
-          padding:16px;
-          box-shadow:0 1px 3px rgba(0,0,0,0.02);
+          background:#fcfbf7; border:1px solid var(--border);
+          border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.02);
         }
         .card-title{
           font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
-          color:var(--text-dim);margin-bottom:12px;
-          display:flex;align-items:center;gap:8px;
+          color:var(--text-dim);margin-bottom:12px; display:flex;align-items:center;gap:8px;
         }
         .card-title::before{content:'';width:3px;height:14px;background:var(--gradient);border-radius:2px}
 
@@ -97,7 +115,6 @@
         th{background:#f4f1ea;color:var(--text-dim);position:sticky;top:0;z-index:10;font-weight:600}
         tr:hover{background:#f9f8f4}
 
-        /* 風標圖例 */
         .legend{
           position:absolute;bottom:24px;left:24px;z-index:999;
           background:rgba(255,255,255,0.92);backdrop-filter:blur(12px);
@@ -107,27 +124,20 @@
         .legend-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:8px}
         .legend-item{display:flex;align-items:center;gap:8px;margin:4px 0}
 
-        .wind-barb-icon{pointer-events:none}
+        .wind-barb-icon { background: transparent !important; border: none !important; }
         .leaflet-control-zoom a{background:#ffffff!important;color:var(--text)!important;border:1px solid var(--border)!important}
         .leaflet-control-zoom{border:none!important;box-shadow:0 4px 12px rgba(0,0,0,0.08)!important;border-radius:8px!important;overflow:hidden}
 
-        /* ★ RWD 響應式手機版設定 ★ */
         @media (max-width: 800px) {
             html, body { overflow-y: auto; overflow-x: hidden; }
             .app { height: auto; min-height: 100vh; }
+            .header { justify-content: center; text-align: center; }
             .header h1 { font-size: 15px; }
-            /* 改為上下堆疊 */
+            .system-monitor { width: 100%; justify-content: center; }
             .main { display: flex; flex-direction: column; height: auto; overflow: visible; }
-            
-            /* 地圖固定於上半部 */
             .map-panel { height: 50vh; min-height: 400px; width: 100%; }
-            
-            /* 控制面板與表格移至下半部並允許展開 */
             .sidebar { width: 100%; height: auto; border-left: none; border-top: 1px solid var(--border); overflow-y: visible; padding: 16px 12px; }
-            
-            /* 調整手機版圖例大小避免遮擋地圖 */
             .legend { bottom: 16px; left: 10px; transform: scale(0.85); transform-origin: bottom left; padding: 10px 14px; }
-            
             .table-wrap { max-height: 400px; }
         }
     </style>
@@ -135,7 +145,17 @@
 <body>
 <div class="app">
   <header class="header">
-    <h1>海事測站與軌跡查詢儀表板 | Marine Observation Dashboard</h1>
+    <h1>船舶自動識別系統</h1>
+    <div class="system-monitor">
+        <div class="sys-stat">
+            <div class="sys-indicator" id="ind-obs"></div>
+            <span>正常接收: <b id="time-obs">載入中...</b></span>
+        </div>
+        <div class="sys-stat">
+            <div class="sys-indicator" id="ind-doubt"></div>
+            <span>疑慮接收: <b id="time-doubt">載入中...</b></span>
+        </div>
+    </div>
   </header>
 
   <div class="main">
@@ -143,32 +163,43 @@
     <div class="map-panel" id="mapSection">
       <div id="map"></div>
       <div class="legend">
-        <div class="legend-title">風標圖例</div>
+        <div class="legend-title">風標圖例 (QGIS 樣式)</div>
         <div class="legend-item">
-          <svg xmlns="http://www.w3.org/2000/svg" width="36" height="16" viewBox="0 0 44 16">
-            <line x1="10" y1="8" x2="36" y2="8" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="10" cy="8" r="3" fill="#2563eb"/>
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
+            <circle cx="15" cy="15" r="4.5" fill="#64748b" stroke="#000" stroke-width="1.5"/>
           </svg>
-          <span>風向（桿朝風吹來方向）</span>
+          <span>靜風 (Calm, 0 m/s)</span>
         </div>
         <div class="legend-item">
-          <svg xmlns="http://www.w3.org/2000/svg" width="36" height="16" viewBox="0 0 44 16">
-            <line x1="10" y1="8" x2="36" y2="8" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="10" cy="8" r="3" fill="#2563eb"/>
-            <line x1="34" y1="8" x2="29" y2="1" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
+            <line x1="15" y1="26" x2="15" y2="4" stroke="#000" stroke-width="2" stroke-linecap="round"/>
+            <line x1="15" y1="4" x2="27" y2="0" stroke="#000" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="15" cy="26" r="4.5" fill="#64748b" stroke="#000" stroke-width="1.5"/>
           </svg>
           <span>全羽 = 10 m/s</span>
         </div>
         <div class="legend-item">
-          <svg xmlns="http://www.w3.org/2000/svg" width="36" height="16" viewBox="0 0 44 16">
-            <line x1="10" y1="8" x2="36" y2="8" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="10" cy="8" r="3" fill="#2563eb"/>
-            <line x1="34" y1="8" x2="31" y2="4.5" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
+            <line x1="15" y1="26" x2="15" y2="4" stroke="#000" stroke-width="2" stroke-linecap="round"/>
+            <line x1="15" y1="9" x2="21" y2="7" stroke="#000" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="15" cy="26" r="4.5" fill="#64748b" stroke="#000" stroke-width="1.5"/>
           </svg>
           <span>半羽 = 5 m/s</span>
         </div>
-        <div class="legend-item" style="color:var(--red);font-weight:600;margin-top:4px;">
-          <span>紅色標示 = 歷史前一筆 (Fallback)</span>
+        
+        <!-- 時間狀態顏色說明 (會由 JS 自動切換文字) -->
+        <div style="border-top:1px solid #e2e8f0; margin: 8px 0; padding-top: 8px;"></div>
+        <div class="legend-item" style="color:#2563eb;font-weight:600;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><circle cx="6" cy="6" r="5" fill="#2563eb" stroke="#000" stroke-width="1"/></svg>
+          <span id="legend-blue-text">藍色圓點：查詢基準時間</span>
+        </div>
+        <div class="legend-item" style="color:#0ea5e9;font-weight:600;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><circle cx="6" cy="6" r="5" fill="#0ea5e9" stroke="#000" stroke-width="1"/></svg>
+          <span id="legend-lightblue-text">淺藍圓點：24小時內資料</span>
+        </div>
+        <div class="legend-item" style="color:#94a3b8;font-weight:600;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><circle cx="6" cy="6" r="5" fill="#94a3b8" stroke="#000" stroke-width="1"/></svg>
+          <span id="legend-gray-text">灰色圓點：超過24小時資料</span>
         </div>
       </div>
     </div>
@@ -182,34 +213,33 @@
           <option value="esriTopo">Esri 地形圖 (含地理特徵)</option>
           <option value="esriSatellite">Esri 衛星空照圖 (真實影像)</option>
           <option value="osm">OpenStreetMap (標準版)</option>
-          <option value="openTopo">OpenTopoMap (等高線地形圖)</option>
         </select>
       </div>
 
       <div class="card-box">
-        <div class="card-title">1. 全台測站時間狀態查詢</div>
-        <label for="queryTime">選擇時間 (帶入 API 參數)：</label>
-        <input type="datetime-local" id="queryTime" value="2026-05-31T01:00">
+        <div class="card-title">1. 全台船舶狀態查詢</div>
+        <label for="queryTime">選擇基準時間 (UTC)：</label>
+        <input type="datetime-local" id="queryTime">
         <button id="btnQueryOverview" class="btn btn-primary">載入地圖測站狀態</button>
       </div>
 
       <div class="card-box">
-        <div class="card-title">2. 單一測站軌跡與時間序列</div>
+        <div class="card-title">2. 單一船舶軌跡</div>
         <label for="stationSelect">選擇測站 / 船隻：</label>
         <select id="stationSelect">
           <option value="">載入測站清單中...</option>
         </select>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div>
-            <label for="startTime">開始時間：</label>
-            <input type="datetime-local" id="startTime" value="2026-05-31T00:00">
+            <label for="startTime">開始時間 (UTC)：</label>
+            <input type="datetime-local" id="startTime">
           </div>
           <div>
-            <label for="endTime">結束時間：</label>
-            <input type="datetime-local" id="endTime" value="2026-05-31T02:00">
+            <label for="endTime">結束時間 (UTC)：</label>
+            <input type="datetime-local" id="endTime">
           </div>
         </div>
-        <button id="btnQueryStation" class="btn btn-success">查詢軌跡與詳細表格</button>
+        <button id="btnQueryStation" class="btn btn-success">查詢歷史軌跡區間</button>
       </div>
 
       <div class="card-box" style="flex:1;display:flex;flex-direction:column;">
@@ -218,7 +248,7 @@
           <table id="observationTable">
             <thead>
               <tr>
-                <th>時間</th>
+                <th>時間(UTC)</th>
                 <th>緯度</th>
                 <th>經度</th>
                 <th>風速</th>
@@ -245,27 +275,59 @@
 <script>
     const API_BASE_URL = 'https://crabbing-quicken-pull.ngrok-free.dev';
 
+    // 自動設定預設時間 (UTC)
+    const setInitialDateTimes = () => {
+        const now = new Date();
+        const roundedMinutes = Math.floor(now.getUTCMinutes() / 10) * 10;
+        now.setUTCMinutes(roundedMinutes, 0, 0);
+
+        const formatForInput = (d) => {
+            const year = d.getUTCFullYear();
+            const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(d.getUTCDate()).padStart(2, '0');
+            const hours = String(d.getUTCHours()).padStart(2, '0');
+            const mins = String(d.getUTCMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day}T${hours}:${mins}`;
+        };
+
+        const endTimeStr = formatForInput(now);
+        const startTimeDate = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000));
+        const startTimeStr = formatForInput(startTimeDate);
+
+        document.getElementById('queryTime').value = endTimeStr;
+        document.getElementById('endTime').value = endTimeStr;
+        document.getElementById('startTime').value = startTimeStr;
+    };
+
+    const loadSystemStatus = () => {
+        fetch(`${API_BASE_URL}/system/latest-receive-time`, { headers: { 'ngrok-skip-browser-warning': 'true' } })
+            .then(res => res.json())
+            .then(data => {
+                if (data.obs_latest_receive) {
+                    document.getElementById('time-obs').textContent = data.obs_latest_receive;
+                    document.getElementById('ind-obs').classList.add('active');
+                } else {
+                    document.getElementById('time-obs').textContent = '無資料';
+                }
+                if (data.doubt_latest_receive) {
+                    document.getElementById('time-doubt').textContent = data.doubt_latest_receive;
+                    document.getElementById('ind-doubt').classList.add('active');
+                } else {
+                    document.getElementById('time-doubt').textContent = '無資料';
+                }
+            })
+            .catch(err => {
+                console.error('無法取得系統狀態:', err);
+                document.getElementById('time-obs').textContent = '連線失敗';
+                document.getElementById('time-doubt').textContent = '連線失敗';
+            });
+    };
+
     const basemaps = {
-        esriStreet: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 19,
-            attribution: 'Tiles &copy; Esri'
-        }),
-        esriTopo: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 19,
-            attribution: 'Tiles &copy; Esri'
-        }),
-        esriSatellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 19,
-            attribution: 'Tiles &copy; Esri'
-        }),
-        osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; OpenStreetMap contributors'
-        }),
-        openTopo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-            maxZoom: 17,
-            attribution: '&copy; OpenTopoMap'
-        })
+        esriStreet: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
+        esriTopo: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
+        esriSatellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
+        osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 })
     };
 
     const map = L.map('map', { zoomControl: true }).setView([23.5, 121.0], 7);
@@ -286,52 +348,53 @@
         return datetimeLocalStr;
     };
 
-    // 手機版自動捲動至地圖的函數
     const scrollToMapOnMobile = () => {
-        if (window.innerWidth <= 800) {
-            document.getElementById('mapSection').scrollIntoView({ behavior: 'smooth' });
-        }
+        if (window.innerWidth <= 800) { document.getElementById('mapSection').scrollIntoView({ behavior: 'smooth' }); }
     };
 
-    const createWindIcon = (windDir, windSpeed, isFallback = false) => {
+    const createWindIcon = (windDir, windSpeed, color = '#2563eb') => {
         const rotation = windDir || 0;
-        const color = isFallback ? '#dc2626' : '#2563eb'; 
-        const size = 36; 
-        const anchor = size / 2;
+        const size = 56; 
+        const anchor = size / 2; 
 
         let speed = windSpeed || 0;
         let barbsSvg = '';
-        let pos = 34; 
+        const baseCircle = `<circle cx="28" cy="28" r="4.5" fill="${color}" stroke="#000" stroke-width="1.5"/>`;
 
-        const pennants = Math.floor(speed / 50);
-        speed %= 50;
-        const fullBarbs = Math.floor(speed / 10);
-        speed %= 10;
-        const halfBarbs = Math.floor(speed / 5);
+        if (speed < 0.5) {
+            barbsSvg = baseCircle;
+        } else {
+            barbsSvg += `<line x1="28" y1="28" x2="28" y2="6" stroke="#000" stroke-width="2" stroke-linecap="round"/>`;
+            let y = 6;
+            const pennants = Math.floor(speed / 50);
+            speed %= 50;
+            const fullBarbs = Math.floor(speed / 10);
+            speed %= 10;
+            const halfBarbs = Math.floor(speed / 5);
 
-        for (let i = 0; i < pennants; i++) {
-            barbsSvg += `<polygon points="${pos},8 ${pos-5},1 ${pos-7},8" fill="${color}"/>`;
-            pos -= 7;
-        }
-        for (let i = 0; i < fullBarbs; i++) {
-            barbsSvg += `<line x1="${pos}" y1="8" x2="${pos-5}" y2="1" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>`;
-            pos -= 5;
-        }
-        for (let i = 0; i < halfBarbs; i++) {
-            barbsSvg += `<line x1="${pos}" y1="8" x2="${pos-3}" y2="4.5" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>`;
-            pos -= 4;
+            for (let i = 0; i < pennants; i++) {
+                barbsSvg += `<polygon points="28,${y} 40,${y-5} 28,${y+5}" fill="#000" stroke="#000" stroke-width="1"/>`;
+                y += 7;
+            }
+            for (let i = 0; i < fullBarbs; i++) {
+                barbsSvg += `<line x1="28" y1="${y}" x2="40" y2="${y-5}" stroke="#000" stroke-width="2" stroke-linecap="round"/>`;
+                y += 5;
+            }
+            for (let i = 0; i < halfBarbs; i++) {
+                let startY = (pennants === 0 && fullBarbs === 0) ? y + 5 : y;
+                barbsSvg += `<line x1="28" y1="${startY}" x2="34" y2="${startY-2.5}" stroke="#000" stroke-width="2" stroke-linecap="round"/>`;
+                y += 5;
+            }
+            barbsSvg += baseCircle;
         }
 
         const html = `
-            <div style="transform: rotate(${rotation}deg); width: ${size}px; height: ${size}px; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.95); border-radius: 50%; border: 2px solid ${color}; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
-                <svg width="${size * 0.8}" height="${size * 0.8}" viewBox="0 0 44 16" style="overflow:visible;">
-                    <line x1="10" y1="8" x2="36" y2="8" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>
-                    <circle cx="10" cy="8" r="3" fill="${color}"/>
+            <div style="transform: rotate(${rotation}deg); width: ${size}px; height: ${size}px; display: flex; align-items: center; justify-content: center;">
+                <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="overflow:visible;">
                     ${barbsSvg}
                 </svg>
             </div>
         `;
-
         return L.divIcon({ html: html, className: 'wind-barb-icon', iconSize: [size, size], iconAnchor: [anchor, anchor] });
     };
 
@@ -353,10 +416,28 @@
             .catch(err => console.error('載入測站清單失敗:', err));
     };
 
+    const getDotHtml = (color) => {
+        return `<div style="display:inline-block;width:10px;height:10px;border-radius:50%;background-color:${color};margin-right:6px;border:1px solid rgba(0,0,0,0.4);box-shadow: 0 1px 2px rgba(0,0,0,0.2);"></div>`;
+    };
+
+    // 1. 全台船舶狀態查詢
     const loadOverviewObservations = () => {
+        // 切換圖例文字
+        document.getElementById('legend-blue-text').textContent = '藍色圓點：查詢基準時間';
+        document.getElementById('legend-lightblue-text').textContent = '淺藍圓點：24小時內資料';
+        document.getElementById('legend-gray-text').textContent = '灰色圓點：超過24小時資料';
+
         const rawTime = document.getElementById('queryTime').value;
         const formattedTime = formatDateTimeForApi(rawTime);
-        const url = `${API_BASE_URL}/observations/fallback?time=${encodeURIComponent(formattedTime)}`;
+        const url = `${API_BASE_URL}/observations/latest?time=${encodeURIComponent(formattedTime)}`;
+
+        // 修正 Bug: 確保加上 Z 轉換成 UTC，避免字串中包含多餘的毫秒或秒數而解析為 NaN
+        const targetMs = new Date(formattedTime + 'Z').getTime();
+        const thresholdMs = 24 * 3600 * 1000;
+
+        const btn = document.getElementById('btnQueryOverview');
+        btn.textContent = '載入中...';
+        btn.disabled = true;
 
         fetch(url, { headers: { 'ngrok-skip-browser-warning': 'true' } })
             .then(res => res.json())
@@ -364,25 +445,39 @@
                 observationLayerGroup.clearLayers();
                 const tbody = document.querySelector('#observationTable tbody');
                 tbody.innerHTML = '';
+                btn.textContent = '載入地圖測站狀態';
+                btn.disabled = false;
 
                 if (!Array.isArray(data) || data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:20px;">該時間點無觀測資料</td></tr>';
-                    alert('該時間點無觀測資料');
+                    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:20px;">無觀測資料</td></tr>';
+                    alert('查無觀測資料');
                     return;
                 }
 
                 const latLngs = [];
                 data.forEach(obs => {
-                    const isFallback = (obs.isFallback === true || obs.isFallback === "true");
-                    const tr = document.createElement('tr');
-                    if (isFallback) tr.style.backgroundColor = '#fef2f2';
-
-                    const statusTag = isFallback 
-                        ? `<span style="color:#dc2626;font-size:10px;font-weight:700;">[歷史]</span>` 
-                        : `<span style="color:#059669;font-size:10px;font-weight:700;">[即時]</span>`;
+                    const obsMs = new Date(obs.ObservationTime.replace(' ', 'T') + 'Z').getTime();
+                    const diffMs = targetMs - obsMs;
                     
+                    let iconColor, statusLabel, popupText;
+                    // 給予 60 秒的容錯緩衝空間，避免些微秒差導致判斷失敗
+                    if (diffMs >= 0 && diffMs <= 60000) {
+                        iconColor = '#2563eb'; // Blue
+                        statusLabel = `<span style="color:#2563eb;font-size:10px;font-weight:700;">[基準時間]</span>`;
+                        popupText = '查詢基準時間';
+                    } else if (diffMs > 60000 && diffMs <= thresholdMs) {
+                        iconColor = '#0ea5e9'; // Light Blue
+                        statusLabel = `<span style="color:#0ea5e9;font-size:10px;font-weight:700;">[24H內]</span>`;
+                        popupText = '24小時內資料';
+                    } else {
+                        iconColor = '#94a3b8'; // Gray
+                        statusLabel = `<span style="color:#94a3b8;font-size:10px;font-weight:700;">[>24H]</span>`;
+                        popupText = '超過24小時資料';
+                    }
+
+                    const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td><b>${obs.ShipName || '測站'}</b> (${obs.MMSI}) ${statusTag}</td>
+                        <td><b>${obs.ShipName || '測站'}</b> (${obs.MMSI}) ${statusLabel}</td>
                         <td>${obs.ObservationTime}</td>
                         <td>${obs.Lat}</td>
                         <td>${obs.Lon}</td>
@@ -396,14 +491,15 @@
 
                     if (obs.Lat !== undefined && obs.Lon !== undefined) {
                         latLngs.push([obs.Lat, obs.Lon]);
-                        const icon = createWindIcon(obs.WindDir, obs.WindSpeed, isFallback);
+                        const icon = createWindIcon(obs.WindDir, obs.WindSpeed, iconColor);
                         const marker = L.marker([obs.Lat, obs.Lon], { icon: icon });
+                        
                         marker.bindPopup(`
-                            <div style="color:${isFallback?'#dc2626':'#059669'};font-size:11px;font-weight:700;margin-bottom:4px;">
-                                ${isFallback ? '⚠️ 該時間點無資料 (顯示歷史前一筆)' : '🟢 當下即時資料'}
+                            <div style="color:${iconColor};font-size:11px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;">
+                                ${getDotHtml(iconColor)} <span style="color:var(--text);">${popupText}</span>
                             </div>
                             <b>${obs.ShipName || '測站'} (MMSI: ${obs.MMSI})</b><br>
-                            <div class="popup-row"><span class="popup-label">資料時間:</span> <span class="popup-val">${obs.ObservationTime}</span></div>
+                            <div class="popup-row"><span class="popup-label">資料時間(UTC):</span> <span class="popup-val">${obs.ObservationTime}</span></div>
                             <div class="popup-row"><span class="popup-label">風速:</span> <span class="popup-val">${obs.WindSpeed} m/s</span></div>
                             <div class="popup-row"><span class="popup-label">風向:</span> <span class="popup-val">${obs.WindDir}°</span></div>
                             <div class="popup-row"><span class="popup-label">氣壓:</span> <span class="popup-val">${obs.AirPressure} hPa</span></div>
@@ -413,20 +509,33 @@
                 });
 
                 if (latLngs.length > 0) map.fitBounds(latLngs, { padding: [50, 50] });
-                
-                // ★ 查詢完成後，自動捲動回地圖 (僅限手機版)
                 scrollToMapOnMobile();
             })
-            .catch(err => { console.error('查詢失敗:', err); alert('查詢觀測資料失敗'); });
+            .catch(err => { console.error('查詢失敗:', err); btn.textContent = '載入地圖測站狀態'; btn.disabled = false; });
     };
 
+    // 2. 單一船舶軌跡
     const loadStationTimeSeries = () => {
+        // 切換圖例文字
+        document.getElementById('legend-blue-text').textContent = '藍色圓點：結束基準時間';
+        document.getElementById('legend-lightblue-text').textContent = '淺藍圓點：24小時內資料';
+        document.getElementById('legend-gray-text').textContent = '灰色圓點：24小時前資料';
+
         const mmsi = document.getElementById('stationSelect').value;
         if (!mmsi) return alert('請先選擇測站');
         
-        const start = formatDateTimeForApi(document.getElementById('startTime').value);
-        const end = formatDateTimeForApi(document.getElementById('endTime').value);
-        const url = `${API_BASE_URL}/stations/${mmsi}/observations?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+        const rawStart = document.getElementById('startTime').value;
+        const rawEnd = document.getElementById('endTime').value;
+        const formattedEnd = formatDateTimeForApi(rawEnd);
+        const url = `${API_BASE_URL}/stations/${mmsi}/observations?start=${encodeURIComponent(formatDateTimeForApi(rawStart))}&end=${encodeURIComponent(formattedEnd)}`;
+
+        // 修正 Bug: 確保加上 Z 轉換成 UTC
+        const endMs = new Date(formattedEnd + 'Z').getTime();
+        const thresholdMs = 24 * 3600 * 1000;
+
+        const btn = document.getElementById('btnQueryStation');
+        btn.textContent = '載入中...';
+        btn.disabled = true;
 
         fetch(url, { headers: { 'ngrok-skip-browser-warning': 'true' } })
             .then(res => res.json())
@@ -434,14 +543,31 @@
                 observationLayerGroup.clearLayers();
                 const tbody = document.querySelector('#observationTable tbody');
                 tbody.innerHTML = '';
+                btn.textContent = '查詢歷史軌跡區間';
+                btn.disabled = false;
 
                 if (!Array.isArray(data) || data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:20px;">查無此區間觀測資料</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:20px;">該時間區段內無觀測軌跡</td></tr>';
                     return;
                 }
 
                 const pathCoords = [];
                 data.forEach(obs => {
+                    const obsMs = new Date(obs.ObservationTime.replace(' ', 'T') + 'Z').getTime();
+                    const diffMs = endMs - obsMs;
+                    
+                    let iconColor, popupText;
+                    if (diffMs >= 0 && diffMs <= 60000) {
+                        iconColor = '#2563eb'; // Blue
+                        popupText = '結束基準時間';
+                    } else if (diffMs > 60000 && diffMs <= thresholdMs) {
+                        iconColor = '#0ea5e9'; // Light Blue
+                        popupText = '24小時內資料';
+                    } else {
+                        iconColor = '#94a3b8'; // Gray
+                        popupText = '24小時前資料';
+                    }
+                    
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${obs.ObservationTime}</td>
@@ -457,11 +583,16 @@
 
                     if (obs.Lat !== undefined && obs.Lon !== undefined) {
                         pathCoords.push([obs.Lat, obs.Lon]);
-                        const icon = createWindIcon(obs.WindDir, obs.WindSpeed, false);
-                        const marker = L.marker([obs.Lat, obs.Lon], { icon: icon });
+                        const icon = createWindIcon(obs.WindDir, obs.WindSpeed, iconColor);
+                        const zOffset = (diffMs <= thresholdMs) ? 100 : 0;
+                        const marker = L.marker([obs.Lat, obs.Lon], { icon: icon, zIndexOffset: zOffset });
+                        
                         marker.bindPopup(`
+                            <div style="color:${iconColor};font-size:11px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;">
+                                ${getDotHtml(iconColor)} <span style="color:var(--text);">${popupText}</span>
+                            </div>
                             <b>MMSI: ${obs.MMSI}</b><br>
-                            <div class="popup-row"><span class="popup-label">時間:</span> <span class="popup-val">${obs.ObservationTime}</span></div>
+                            <div class="popup-row"><span class="popup-label">時間(UTC):</span> <span class="popup-val">${obs.ObservationTime}</span></div>
                             <div class="popup-row"><span class="popup-label">風速:</span> <span class="popup-val">${obs.WindSpeed} m/s</span></div>
                             <div class="popup-row"><span class="popup-label">風向:</span> <span class="popup-val">${obs.WindDir}°</span></div>
                         `);
@@ -470,21 +601,24 @@
                 });
 
                 if (pathCoords.length > 0) {
-                    const polyline = L.polyline(pathCoords, { color: '#2563eb', weight: 3, opacity: 0.8, dashArray: '4, 8' });
+                    const polyline = L.polyline(pathCoords, { color: '#64748b', weight: 2, opacity: 0.8, dashArray: '4, 8' });
                     observationLayerGroup.addLayer(polyline);
                     map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
                 }
-
-                // ★ 查詢完成後，自動捲動回地圖 (僅限手機版)
                 scrollToMapOnMobile();
             })
-            .catch(err => { console.error('查詢失敗:', err); });
+            .catch(err => { console.error('查詢失敗:', err); btn.textContent = '查詢歷史軌跡區間'; btn.disabled = false; });
     };
+
+    document.addEventListener("DOMContentLoaded", () => {
+        setInitialDateTimes();
+        loadStationsDropdown();
+        loadSystemStatus();
+    });
 
     document.getElementById('btnQueryOverview').addEventListener('click', loadOverviewObservations);
     document.getElementById('btnQueryStation').addEventListener('click', loadStationTimeSeries);
 
-    loadStationsDropdown();
 </script>
 </body>
 </html>
